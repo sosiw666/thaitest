@@ -42,3 +42,203 @@
   }
   .text.show{ opacity:1; }
   .text.small{ font-size:clamp(20px,4.5vw,28px); }
+
+  .group{ display:flex; flex-direction:column; align-items:center; gap:20px; width:100%;
+    opacity:0; transition:opacity .5s var(--ease); pointer-events:none; }
+  .group.show{ opacity:1; pointer-events:auto; }
+  .hidden{ display:none !important; }
+
+  /* Liquid glass */
+  .glass{
+    position:relative; overflow:hidden; isolation:isolate;
+    border-radius:28px;
+    background:rgba(255,255,255,.22);
+    backdrop-filter:blur(12px) saturate(1.6);
+    -webkit-backdrop-filter:blur(12px) saturate(1.6);
+    border:1px solid rgba(255,255,255,.65);
+    box-shadow:
+      inset 0 2px 6px rgba(255,255,255,.75),
+      inset 0 -8px 16px rgba(255,255,255,.18),
+      0 10px 30px rgba(0,0,0,.25);
+  }
+  .glass::before{ /* แสงสะท้อนไหลผ่าน (transform อย่างเดียว = ลื่น) */
+    content:""; position:absolute; top:0; bottom:0; left:-60%; width:60%; z-index:-1;
+    pointer-events:none; will-change:transform;
+    background:linear-gradient(115deg,transparent 20%,rgba(255,255,255,.55) 50%,transparent 80%);
+    animation:sheen 4.5s ease-in-out infinite;
+  }
+  .glass::after{ /* ขอบแสงขยับเบาๆ */
+    content:""; position:absolute; inset:0; z-index:-1; pointer-events:none; border-radius:inherit;
+    background:radial-gradient(120% 140% at 20% 0%,rgba(255,255,255,.45),transparent 55%);
+    animation:glow 6s ease-in-out infinite alternate; will-change:opacity;
+  }
+  @keyframes sheen{ from{ transform:translate3d(0,0,0); } to{ transform:translate3d(400%,0,0); } }
+  @keyframes glow{ from{ opacity:.35; } to{ opacity:.9; } }
+
+  .row{ display:flex; gap:12px; width:100%; }
+  input{
+    -webkit-user-select:text; user-select:text;
+    flex:1; min-width:0; font:inherit; font-size:18px; color:#fff;
+    padding:16px 22px; outline:none;
+  }
+  input::placeholder{ color:rgba(255,255,255,.75); }
+  input:focus{ border-color:#fff; box-shadow:inset 0 2px 6px rgba(255,255,255,.75), 0 0 0 3px rgba(255,255,255,.4), 0 10px 30px rgba(0,0,0,.25); }
+
+  button{
+    font:inherit; font-weight:700; font-size:18px; color:#fff; cursor:pointer;
+    padding:16px 28px; text-shadow:0 1px 3px rgba(0,0,0,.5);
+    transition:transform .2s var(--ease);
+  }
+  button:hover{ transform:scale(1.05); }
+  button:active{ transform:scale(.96); }
+  button:focus-visible{ outline:3px solid #fff; outline-offset:3px; }
+  .choices{ display:flex; gap:14px; justify-content:center; }
+  .choices button{ min-width:120px; }
+  .quiz{ display:grid; grid-template-columns:1fr 1fr; gap:14px; }
+  .quiz button{ min-width:0; padding:16px 12px; line-height:1.4; }
+
+  @media (max-width:380px){ .quiz{ grid-template-columns:1fr; } }
+  @media (prefers-reduced-motion:reduce){
+    .blob,.glass::before,.glass::after{ animation:none; }
+  }
+</style>
+</head>
+<body ondragstart="return false" oncontextmenu="return false">
+<div class="bg"><div class="blob b1"></div><div class="blob b2"></div><div class="blob b3"></div></div>
+
+<main>
+  <p id="msg" class="text"></p>
+
+  <form id="typeForm" class="group row hidden" autocomplete="off">
+    <input id="typeInput" class="glass" type="text" placeholder="พิมพ์ที่นี่..." aria-label="ช่องพิมพ์ข้อความ">
+    <button id="sendBtn" class="glass" type="button">ส่ง</button>
+  </form>
+
+  <div id="quiz" class="group quiz hidden">
+    <button class="glass" type="button">เบนจามิน</button>
+    <button class="glass" type="button">เบญจางคประดิษฐ์</button>
+    <button class="glass" type="button">เบนซ์</button>
+    <button class="glass" type="button">เบนดำโจร</button>
+  </div>
+
+  <div id="choices" class="group choices hidden">
+    <button id="yes" class="glass" type="button">ใช่</button>
+    <button id="no" class="glass" type="button">ไม่ใช่</button>
+  </div>
+</main>
+
+<script>
+const msg = document.getElementById('msg');
+const typeForm = document.getElementById('typeForm');
+const typeInput = document.getElementById('typeInput');
+const choices = document.getElementById('choices');
+const quiz = document.getElementById('quiz');
+const wait = ms => new Promise(r => setTimeout(r, ms));
+
+// แสดงข้อความค่อยๆ ขึ้น
+async function showText(t, small = false){
+  msg.classList.remove('show');
+  await wait(500);
+  msg.textContent = t;
+  msg.classList.toggle('small', small);
+  void msg.offsetWidth;
+  msg.classList.add('show');
+  await wait(500);
+}
+async function hideText(){ msg.classList.remove('show'); await wait(500); }
+function showGroup(el){ el.classList.remove('hidden'); void el.offsetWidth; el.classList.add('show'); }
+async function hideGroup(el){ el.classList.remove('show'); await wait(450); el.classList.add('hidden'); }
+
+// ปรับข้อความให้เทียบง่าย (ตัดช่องว่าง ตัวพิมพ์)
+const norm = s => s.replace(/\s+/g,'').toLowerCase();
+
+// คำถามก่อนเช็คแบตเตอรี่ เลือกอะไรก็ได้
+async function askQuiz(){
+  await showText('เบนจามิน อดัมโจนส์ คือใคร', true);
+  showGroup(quiz);
+  await new Promise(done => {
+    quiz.querySelectorAll('button').forEach(btn => {
+      btn.addEventListener('click', () => {
+        if(quiz.dataset.done) return;
+        quiz.dataset.done = '1';
+        done();
+      });
+    });
+  });
+  await hideGroup(quiz);
+  await showText('เลือกอะไรก็ได้ ผมแค่อยากให้เลือกเฉยๆ ครับ', true);
+  await wait(1800);
+  await hideText();
+}
+
+async function getBattery(){
+  try{
+    if(!navigator.getBattery) return null;
+    const b = await Promise.race([
+      navigator.getBattery(),
+      new Promise((_, no) => setTimeout(no, 2000))
+    ]);
+    return Math.round(b.level * 100);
+  }catch(e){ return null; }
+}
+
+async function start(){
+  await showText('สวัสดี เว็บนี้ถูกสร้างโดย คนจาก ห้อง ม.2/3');
+  await wait(1400);
+  await hideText();
+
+  await showText('ผมอยากให้คุณพิมพ์คำว่า สวัสดี ม.2/3 หน่อยครับ', true);
+  showGroup(typeForm);
+  typeInput.focus({preventScroll:true});
+}
+
+let sent = false;
+typeForm.addEventListener('submit', e => { e.preventDefault(); send(); });
+document.getElementById('sendBtn').addEventListener('click', e => { e.preventDefault(); send(); });
+typeInput.addEventListener('keydown', e => { if(e.key === 'Enter'){ e.preventDefault(); send(); } });
+
+async function send(){
+  if(sent) return; sent = true;
+  const ok = norm(typeInput.value) === norm('สวัสดี ม.2/3');
+  typeInput.blur();
+  await hideGroup(typeForm);
+
+  if(!ok){
+    await hideText();
+    await showText('คุณเขียนผิดนะ แต่ไม่เป็นไรหรอกครับ ไปกันต่อเถอะ', true);
+    await wait(1400);
+  }
+  await hideText();
+
+  await askQuiz();
+
+  const level = await getBattery();
+  if(level === null){
+    await showText('เบราว์เซอร์นี้เช็คแบตเตอรี่ไม่ได้ครับ ไปต่อกันเลย', true);
+    await wait(1400);
+    return thanks();
+  }
+  await showText(`ตอนนี้แบตเตอรี่ของคุณเหลือ ${level}% หรือเปล่าครับ`, true);
+  showGroup(choices);
+}
+
+let answered = false;
+async function answer(text){
+  if(answered) return; answered = true;
+  await hideGroup(choices);
+  await hideText();
+  await showText(text);
+  await wait(1000);
+  thanks();
+}
+async function thanks(){
+  await hideText();
+  await showText('ขอบคุณที่ใช้เว็บผมนะครับ คนที่ส่งเว็บให้ ก็คนทำเองนี่แหละครับ');
+}
+document.getElementById('yes').onclick = () => answer('ใช่');
+document.getElementById('no').onclick = () => answer('ไม่ใช่');
+
+start();
+</script>
+</body>
+</html>
